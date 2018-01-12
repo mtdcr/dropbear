@@ -22,6 +22,14 @@ void * m_strdup(const char * str) {
     return ret;
 }
 
+void * m_reallocarray(void* ptr, size_t nmemb, size_t size) {
+
+	if (nmemb > 0 && SIZE_MAX / nmemb < size) {
+		dropbear_exit("m_reallocarray failed");
+	}
+	return m_realloc(ptr, nmemb * size);
+}
+
 #if !DROPBEAR_TRACKING_MALLOC
 
 /* Simple wrappers around malloc etc */

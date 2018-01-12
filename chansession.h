@@ -37,6 +37,12 @@ struct exitinfo {
 	int exitcore;
 };
 
+struct ChildEnv {
+
+	char * name;
+	char * value;
+};
+
 struct ChanSess {
 
 	char * cmd; /* command to exec */
@@ -76,6 +82,9 @@ struct ChanSess {
 #if DROPBEAR_SVR_PUBKEY_OPTIONS_BUILT
 	char *original_command;
 #endif
+
+	struct ChildEnv *env;
+	size_t envsize;
 };
 
 struct ChildPid {

@@ -44,6 +44,7 @@ static int sessioncommand(struct Channel *channel, struct ChanSess *chansess,
 		int iscmd, int issubsys);
 static int sessionpty(struct ChanSess * chansess);
 static int sessionsignal(const struct ChanSess *chansess);
+static int sessionenv(struct ChanSess *chansess);
 static int noptycommand(struct Channel *channel, struct ChanSess *chansess);
 static int ptycommand(struct Channel *channel, struct ChanSess *chansess);
 static int sessionwinchange(const struct ChanSess *chansess);
@@ -273,6 +274,9 @@ static int newchansess(struct Channel *channel) {
 	chansess->agentdir = NULL;
 #endif
 
+	chansess->env = NULL;
+	chansess->envsize = 0;
+
 	channel->prio = DROPBEAR_CHANNEL_PRIO_INTERACTIVE;
 
 	return 0;
@@ -319,6 +323,12 @@ static void cleanupchansess(const struct Channel *channel) {
 		TRACE(("leave closechansess: chansess == NULL"))
 		return;
 	}
+
+	for (i = 0; i < chansess->envsize; i++) {
+		m_free(chansess->env[i].name);
+		m_free(chansess->env[i].value);
+	}
+	m_free(chansess->env);
 
 	m_free(chansess->cmd);
 	m_free(chansess->term);
@@ -405,8 +415,10 @@ static void chansessionrequest(struct Channel *channel) {
 #endif
 	} else if (strcmp(type, "signal") == 0) {
 		ret = sessionsignal(chansess);
+	} else if (strcmp(type, "env") == 0) {
+		ret = sessionenv(chansess);
 	} else {
-		/* etc, todo "env", "subsystem" */
+		/* etc, todo "subsystem" */
 	}
 
 out:
@@ -457,6 +469,33 @@ static int sessionsignal(const struct ChanSess *chansess) {
 	if (kill(chansess->pid, sig) < 0) {
 		return DROPBEAR_FAILURE;
 	} 
+
+	return DROPBEAR_SUCCESS;
+}
+
+/* Send an environment variable to a session's process as requested by the client*/
+static int sessionenv(struct ChanSess *chansess) {
+
+	char *name, *value;
+
+	name = buf_getstring(ses.payload, NULL);
+	value = buf_getstring(ses.payload, NULL);
+
+	if (!strcmp("LANG", name) || !strncmp("LC_", name, 3)) {
+		void *tmp = m_reallocarray(chansess->env, chansess->envsize + 1, sizeof(*chansess->env));
+		if (tmp == NULL) {
+			m_free(name);
+			m_free(value);
+			return DROPBEAR_FAILURE;
+		}
+		chansess->env = tmp;
+		chansess->env[chansess->envsize].name = name;
+		chansess->env[chansess->envsize].value = value;
+		chansess->envsize++;
+	} else {
+		m_free(name);
+		m_free(value);
+	}
 
 	return DROPBEAR_SUCCESS;
 }
@@ -923,6 +962,7 @@ static void addchildpid(struct ChanSess *chansess, pid_t pid) {
 static void execchild(const void *user_data) {
 	const struct ChanSess *chansess = user_data;
 	char *usershell = NULL;
+	size_t i;
 
 	/* with uClinux we'll have vfork()ed, so don't want to overwrite the
 	 * hostkey. can't think of a workaround to clear it */
@@ -997,6 +1037,10 @@ static void execchild(const void *user_data) {
 		addnewvar("SSH_CLIENT", chansess->client_string);
 	}
 	
+	for (i = 0; i < chansess->envsize; i++) {
+		addnewvar(chansess->env[i].name, chansess->env[i].value);
+	}
+
 #if DROPBEAR_SVR_PUBKEY_OPTIONS_BUILT
 	if (chansess->original_command) {
 		addnewvar("SSH_ORIGINAL_COMMAND", chansess->original_command);

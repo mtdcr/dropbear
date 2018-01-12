@@ -9,6 +9,7 @@ void * m_malloc(size_t size);
 void * m_calloc(size_t nmemb, size_t size);
 void * m_strdup(const char * str);
 void * m_realloc(void* ptr, size_t size);
+void * m_reallocarray(void* ptr, size_t nmemb, size_t size);
 
 #if DROPBEAR_TRACKING_MALLOC
 void m_free_direct(void* ptr);
